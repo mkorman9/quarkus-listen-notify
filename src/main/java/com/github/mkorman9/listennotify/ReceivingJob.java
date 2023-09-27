@@ -22,6 +22,7 @@ public class ReceivingJob {
     private static final Map<String, Class<?>> CHANNELS = Map.of(
         "messages", Message.class
     );
+    private static final int RECEIVE_TIMEOUT_MS = 250;
 
     @Inject
     DataSource dataSource;
@@ -59,7 +60,7 @@ public class ReceivingJob {
         }
 
         try {
-            var notifications = pgConnection.getNotifications(250);
+            var notifications = pgConnection.getNotifications(RECEIVE_TIMEOUT_MS);
             if (notifications == null) {
                 return;
             }
@@ -71,12 +72,15 @@ public class ReceivingJob {
                     continue;
                 }
 
-                eventBus.send(notification.getName(), objectMapper.readValue(notification.getParameter(), clazz));
+                try {
+                    var message = objectMapper.readValue(notification.getParameter(), clazz);
+                    eventBus.send(notification.getName(), message);
+                } catch (JsonProcessingException e) {
+                    log.error("Deserialization Error", e);
+                }
             }
         } catch (SQLException e) {
             log.error("SQL Error", e);
-        } catch (JsonProcessingException e) {
-            log.error("Deserialization Error", e);
         }
     }
 }
