@@ -15,7 +15,9 @@ import java.util.function.Consumer;
 @ApplicationScoped
 @Slf4j
 public class ConnectionHolder {
-    private static final int SQL_ERRORS_THRESHOLD = 5;
+    private static final int ERRORS_THRESHOLD_BEFORE_RECONNECT = 5;
+    private static final int CONNECTION_ACQUIRE_BACKOFF_BASE = 2;
+    private static final int CONNECTION_ACQUIRE_MAX_TIME_SEC = 64;
 
     private final AtomicBoolean acquired = new AtomicBoolean(true);
     private ConnectionState connectionState = ConnectionState.builder()
@@ -62,7 +64,9 @@ public class ConnectionHolder {
                 return;
             }
 
-            var backoffTime = ((long) Math.min(Math.pow(2, i), 64));
+            var backoffTime = ((long)
+                Math.min(Math.pow(CONNECTION_ACQUIRE_BACKOFF_BASE, i), CONNECTION_ACQUIRE_MAX_TIME_SEC)
+            );
             log.error("Trying to acquire database connection (try #{}), waiting {}s", i, backoffTime);
 
             try {
@@ -78,7 +82,7 @@ public class ConnectionHolder {
     private void reportExecutionError() {
         executionErrorsCount++;
 
-        if (executionErrorsCount > SQL_ERRORS_THRESHOLD) {
+        if (executionErrorsCount > ERRORS_THRESHOLD_BEFORE_RECONNECT) {
             var connection = connectionState.connection;
             if (connection != null) {
                 try {
