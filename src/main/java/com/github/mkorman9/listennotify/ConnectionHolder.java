@@ -82,7 +82,7 @@ public class ConnectionHolder {
     private void reportExecutionError() {
         executionErrorsCount++;
 
-        if (executionErrorsCount > ERRORS_THRESHOLD_BEFORE_RECONNECT) {
+        if (executionErrorsCount >= ERRORS_THRESHOLD_BEFORE_RECONNECT) {
             var connection = connectionState.connection;
             if (connection != null) {
                 try {
