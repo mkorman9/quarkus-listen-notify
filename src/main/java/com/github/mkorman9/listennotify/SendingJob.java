@@ -7,6 +7,7 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @ApplicationScoped
@@ -27,6 +28,6 @@ public class SendingJob {
             return;
         }
 
-        sender.send(Channel.MESSAGES, new Message("hello world"));
+        sender.send(Channel.MESSAGES, new Message(Instant.now().toString()));
     }
 }
