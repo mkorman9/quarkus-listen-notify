@@ -27,6 +27,6 @@ public class SendingJob {
             return;
         }
 
-        sender.send("messages", new Message("hello world"));
+        sender.send(Channel.MESSAGES, new Message("hello world"));
     }
 }

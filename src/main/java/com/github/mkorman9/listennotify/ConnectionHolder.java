@@ -8,7 +8,6 @@ import org.postgresql.jdbc.PgConnection;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -19,7 +18,6 @@ public class ConnectionHolder {
 
     private final AtomicBoolean isActive = new AtomicBoolean(false);
     private final AtomicBoolean shouldReconnect = new AtomicBoolean(false);
-    private Map<String, Class<?>> channelsMapping;
     private Connection connection;
     private PgConnection pgConnection;
     private int sqlErrorsCount;
@@ -27,8 +25,7 @@ public class ConnectionHolder {
     @Inject
     DataSource dataSource;
 
-    public void initialize(Map<String, Class<?>> channelsMapping) {
-        this.channelsMapping = channelsMapping;
+    public void initialize() {
         reconnect();
     }
 
@@ -68,9 +65,9 @@ public class ConnectionHolder {
         try {
             connection = dataSource.getConnection();
 
-            for (var channel : channelsMapping.keySet()) {
+            for (var channel : Channel.values()) {
                 var statement = connection.createStatement();
-                statement.execute("LISTEN " + channel);
+                statement.execute("LISTEN " + channel.name().toLowerCase());
                 statement.close();
             }
 

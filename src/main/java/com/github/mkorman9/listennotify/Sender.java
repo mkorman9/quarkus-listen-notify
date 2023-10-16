@@ -18,12 +18,14 @@ public class Sender {
     @Inject
     ObjectMapper objectMapper;
 
-    public void send(String channel, Object message) {
+    public void send(Channel channel, Object message) {
+        var channelName = channel.name().toLowerCase();
+
         try (
             var connection = dataSource.getConnection();
             var statement = connection.createStatement()
         ) {
-            statement.execute(String.format("NOTIFY %s, '%s'", channel, objectMapper.writeValueAsString(message)));
+            statement.execute(String.format("NOTIFY %s, '%s'", channelName, objectMapper.writeValueAsString(message)));
         } catch (SQLException e) {
             log.error("SQL Error", e);
         } catch (JsonProcessingException e) {

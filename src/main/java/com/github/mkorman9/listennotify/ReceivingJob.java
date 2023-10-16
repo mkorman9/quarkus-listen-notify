@@ -11,14 +11,10 @@ import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 
 import java.sql.SQLException;
-import java.util.Map;
 
 @ApplicationScoped
 @Slf4j
 public class ReceivingJob {
-    private static final Map<String, Class<?>> CHANNELS = Map.of(
-        "messages", Message.class
-    );
     private static final int RECEIVE_TIMEOUT_MS = 250;
 
     @Inject
@@ -31,7 +27,7 @@ public class ReceivingJob {
     ObjectMapper objectMapper;
 
     public void onStart(@Observes StartupEvent startupEvent) {
-        connectionHolder.initialize(CHANNELS);
+        connectionHolder.initialize();
     }
 
     @Scheduled(every = "1s")
@@ -52,17 +48,28 @@ public class ReceivingJob {
             }
 
             for (var notification : notifications) {
-                var clazz = CHANNELS.get(notification.getName());
-                if (clazz == null) {
-                    log.error("Unregistered channel: {}", notification.getName());
+                Channel channel;
+                try {
+                    channel = Channel.valueOf(notification.getName().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    log.error(
+                        "Received notification for unregistered channel: {}, ({})",
+                        notification.getName(),
+                        notification.getParameter()
+                    );
                     continue;
                 }
 
                 try {
-                    var message = objectMapper.readValue(notification.getParameter(), clazz);
-                    eventBus.send(notification.getName(), message);
+                    var message = objectMapper.readValue(notification.getParameter(), channel.getClazz());
+                    eventBus.send(channel.getEventBusAddress(), message);
                 } catch (JsonProcessingException e) {
-                    log.error("Deserialization Error", e);
+                    log.error(
+                        "Notification deserialization error from channel {} ({})",
+                        notification.getName(),
+                        notification.getParameter(),
+                        e
+                    );
                 }
             }
         } catch (SQLException e) {
