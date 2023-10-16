@@ -67,7 +67,7 @@ public class ConnectionHolder {
 
             for (var channel : Channel.values()) {
                 var statement = connection.createStatement();
-                statement.execute("LISTEN " + channel.name().toLowerCase());
+                statement.execute("LISTEN " + channel.channelName());
                 statement.close();
             }
 
