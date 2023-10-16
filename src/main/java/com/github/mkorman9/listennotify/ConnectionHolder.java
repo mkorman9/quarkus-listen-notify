@@ -52,7 +52,7 @@ public class ConnectionHolder {
             connectionState.set(cachedConnection);
         }
 
-        return Optional.ofNullable(cachedConnection.active ? cachedConnection.pgConnection : null);
+        return Optional.ofNullable(cachedConnection.active() ? cachedConnection.pgConnection() : null);
     }
 
     private void reportExecutionError() {
