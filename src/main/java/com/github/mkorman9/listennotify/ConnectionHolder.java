@@ -66,9 +66,9 @@ public class ConnectionHolder {
             connection = dataSource.getConnection();
 
             for (var channel : Channel.values()) {
-                var statement = connection.createStatement();
-                statement.execute("LISTEN " + channel.channelName());
-                statement.close();
+                try (var statement = connection.createStatement()) {
+                    statement.execute("LISTEN " + channel.channelName());
+                }
             }
 
             pgConnection = connection.unwrap(PgConnection.class);
