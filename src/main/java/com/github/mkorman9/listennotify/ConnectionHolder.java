@@ -2,6 +2,7 @@ package com.github.mkorman9.listennotify;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.postgresql.jdbc.PgConnection;
 
@@ -9,7 +10,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 @ApplicationScoped
@@ -17,17 +18,18 @@ import java.util.function.Consumer;
 public class ConnectionHolder {
     private static final int SQL_ERRORS_THRESHOLD = 5;
 
-    private final AtomicBoolean isActive = new AtomicBoolean(false);
-    private final AtomicBoolean shouldReconnect = new AtomicBoolean(false);
-    private Connection connection;
-    private PgConnection pgConnection;
+    private final AtomicReference<ConnectionState> connectionState = new AtomicReference<>(
+        ConnectionState.builder()
+            .active(false)
+            .build()
+    );
     private int executionErrorsCount;
 
     @Inject
     DataSource dataSource;
 
     public void initialize() {
-        reconnect();
+        connectionState.set(reconnect());
     }
 
     public void acquire(Consumer<PgConnection> consumer) {
@@ -40,30 +42,38 @@ public class ConnectionHolder {
     }
 
     private Optional<PgConnection> getConnection() {
-        if (!isActive.get()) {
-            if (shouldReconnect.get()) {
-                return reconnect();
+        var cachedConnection = connectionState.get();
+        if (!cachedConnection.active()) {
+            if (!cachedConnection.shouldReconnect()) {
+                return Optional.empty();
             }
 
-            return Optional.empty();
+            cachedConnection = reconnect();
+            connectionState.set(cachedConnection);
         }
 
-        return Optional.of(pgConnection);
+        return Optional.ofNullable(cachedConnection.active ? cachedConnection.pgConnection : null);
     }
 
     private void reportExecutionError() {
         executionErrorsCount++;
 
         if (executionErrorsCount > SQL_ERRORS_THRESHOLD) {
-            try {
-                isActive.set(false);
-                resetExecutionErrorsCounter();
-
-                connection.close();
-                reconnect();
-            } catch (SQLException ex) {
-                // ignore
+            var cachedConnection = connectionState.getAndSet(ConnectionState.builder()
+                .active(false)
+                .shouldReconnect(false)
+                .build()
+            );
+            if (cachedConnection.connection != null) {
+                try {
+                    cachedConnection.connection.close();
+                } catch (SQLException e) {
+                    // ignore
+                }
             }
+
+            resetExecutionErrorsCounter();
+            connectionState.set(reconnect());
         }
     }
 
@@ -71,7 +81,8 @@ public class ConnectionHolder {
         executionErrorsCount = 0;
     }
 
-    private Optional<PgConnection> reconnect() {
+    private ConnectionState reconnect() {
+        Connection connection = null;
         try {
             connection = dataSource.getConnection();
 
@@ -81,11 +92,12 @@ public class ConnectionHolder {
                 }
             }
 
-            pgConnection = connection.unwrap(PgConnection.class);
-            isActive.set(true);
-            shouldReconnect.set(false);
-
-            return Optional.of(pgConnection);
+            return ConnectionState.builder()
+                .active(true)
+                .shouldReconnect(false)
+                .connection(connection)
+                .pgConnection(connection.unwrap(PgConnection.class))
+                .build();
         } catch (SQLException e) {
             if (connection != null) {
                 try {
@@ -96,9 +108,20 @@ public class ConnectionHolder {
             }
 
             log.error("Error while acquiring database connection", e);
-            shouldReconnect.set(true);
 
-            return Optional.empty();
+            return ConnectionState.builder()
+                .active(false)
+                .shouldReconnect(true)
+                .build();
         }
+    }
+
+    @Builder(toBuilder = true)
+    private record ConnectionState(
+        boolean active,
+        boolean shouldReconnect,
+        Connection connection,
+        PgConnection pgConnection
+    ) {
     }
 }
