@@ -72,7 +72,6 @@ public class ConnectionHolder {
             }
 
             pgConnection = connection.unwrap(PgConnection.class);
-
             isActive.set(true);
             shouldReconnect.set(false);
 
