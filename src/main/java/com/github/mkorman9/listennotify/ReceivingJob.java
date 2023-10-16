@@ -108,9 +108,9 @@ public class ReceivingJob {
 
             pgConnection = connection.unwrap(PgConnection.class);
 
+            fetchErrorsCount = 0;
             isSubscribed.set(true);
             shouldReconnect = false;
-            fetchErrorsCount = 0;
         } catch (SQLException e) {
             log.error("Error while acquiring database connection", e);
             shouldReconnect = true;
