@@ -7,10 +7,22 @@ public enum Channel {
     MESSAGES(Message.EVENT_BUS_ADDRESS, Message.class);
 
     private final String eventBusAddress;
-    private final Class<?> clazz;
+    private final Class<?> payloadClass;
 
-    Channel(String eventBusAddress, Class<?> clazz) {
+    Channel(String eventBusAddress, Class<?> payloadClass) {
         this.eventBusAddress = eventBusAddress;
-        this.clazz = clazz;
+        this.payloadClass = payloadClass;
+    }
+
+    public String channelName() {
+        return name().toLowerCase();
+    }
+
+    public static Channel fromChannelName(String channelName) {
+        try {
+            return valueOf(channelName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

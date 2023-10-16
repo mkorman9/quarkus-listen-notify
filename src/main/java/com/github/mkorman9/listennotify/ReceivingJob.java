@@ -48,10 +48,8 @@ public class ReceivingJob {
             }
 
             for (var notification : notifications) {
-                Channel channel;
-                try {
-                    channel = Channel.valueOf(notification.getName().toUpperCase());
-                } catch (IllegalArgumentException e) {
+                var channel = Channel.fromChannelName(notification.getName());
+                if (channel == null) {
                     log.error(
                         "Received notification for unregistered channel: {}, ({})",
                         notification.getName(),
@@ -61,7 +59,7 @@ public class ReceivingJob {
                 }
 
                 try {
-                    var message = objectMapper.readValue(notification.getParameter(), channel.getClazz());
+                    var message = objectMapper.readValue(notification.getParameter(), channel.getPayloadClass());
                     eventBus.send(channel.getEventBusAddress(), message);
                 } catch (JsonProcessingException e) {
                     log.error(
