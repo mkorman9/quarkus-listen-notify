@@ -24,6 +24,7 @@ public class ReceivingJob {
         "messages", Message.class
     );
     private static final int RECEIVE_TIMEOUT_MS = 250;
+    private static final int CONNECTION_ERRORS_THRESHOLD = 5;
 
     @Inject
     DataSource dataSource;
@@ -37,6 +38,7 @@ public class ReceivingJob {
     private final AtomicBoolean connected = new AtomicBoolean(false);
     private Connection connection;
     private PgConnection pgConnection;
+    private int connectionErrors;
 
     public void onStart(@Observes StartupEvent startupEvent) {
         acquireConnection();
@@ -69,10 +71,14 @@ public class ReceivingJob {
                 }
             }
         } catch (SQLException e) {
+            connectionErrors++;
+
             try {
-                if (pgConnection.isClosed()) {
+                if (connectionErrors > CONNECTION_ERRORS_THRESHOLD) {
                     connected.set(false);
                     connection.close();
+                    connectionErrors = 0;
+
                     acquireConnection();  // reconnect
                     return;
                 }
@@ -80,7 +86,7 @@ public class ReceivingJob {
                 // ignore
             }
 
-            log.error("SQL Error", e);
+            log.error("Error while fetching notifications from the database", e);
         }
     }
 
@@ -97,7 +103,7 @@ public class ReceivingJob {
             pgConnection = connection.unwrap(PgConnection.class);
             connected.set(true);
         } catch (SQLException e) {
-            log.error("SQL Error", e);
+            log.error("Error while acquiring database connection", e);
         }
     }
 }
