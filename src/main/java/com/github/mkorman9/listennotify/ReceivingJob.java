@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.postgresql.jdbc.PgConnection;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,6 +35,7 @@ public class ReceivingJob {
     ObjectMapper objectMapper;
 
     private final AtomicBoolean connected = new AtomicBoolean(false);
+    private Connection connection;
     private PgConnection pgConnection;
 
     public void onStart(@Observes StartupEvent startupEvent) {
@@ -70,6 +72,7 @@ public class ReceivingJob {
             try {
                 if (pgConnection.isClosed()) {
                     connected.set(false);
+                    connection.close();
                     acquireConnection();  // reconnect
                     return;
                 }
@@ -83,7 +86,7 @@ public class ReceivingJob {
 
     private void acquireConnection() {
         try {
-            var connection = dataSource.getConnection();
+            connection = dataSource.getConnection();
 
             for (var channel : CHANNELS.keySet()) {
                 var statement = connection.createStatement();
