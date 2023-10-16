@@ -17,10 +17,10 @@ public class ConnectionHolder {
     private final DataSource dataSource;
     private final Map<String, Class<?>> channelsMapping;
     private final AtomicBoolean isActive = new AtomicBoolean(false);
+    private final AtomicBoolean shouldReconnect = new AtomicBoolean(false);
     private Connection connection;
     private PgConnection pgConnection;
     private int sqlErrorsCount;
-    private boolean shouldReconnect;
 
     public ConnectionHolder(DataSource dataSource, Map<String, Class<?>> channelsMapping) {
         this.dataSource = dataSource;
@@ -33,17 +33,11 @@ public class ConnectionHolder {
 
     public Optional<PgConnection> getConnection() {
         if (!isActive.get()) {
-            if (shouldReconnect) {
-                reconnect();
-
-                if (isActive.get()) {
-                    return Optional.of(pgConnection);
-                } else {
-                    return Optional.empty();
-                }
-            } else {
-                return Optional.empty();
+            if (shouldReconnect.get()) {
+                return reconnect();
             }
+
+            return Optional.empty();
         }
 
         return Optional.of(pgConnection);
@@ -69,7 +63,7 @@ public class ConnectionHolder {
         sqlErrorsCount = 0;
     }
 
-    private void reconnect() {
+    private Optional<PgConnection> reconnect() {
         try {
             connection = dataSource.getConnection();
 
@@ -82,7 +76,9 @@ public class ConnectionHolder {
             pgConnection = connection.unwrap(PgConnection.class);
 
             isActive.set(true);
-            shouldReconnect = false;
+            shouldReconnect.set(false);
+
+            return Optional.of(pgConnection);
         } catch (SQLException e) {
             if (connection != null) {
                 try {
@@ -93,7 +89,9 @@ public class ConnectionHolder {
             }
 
             log.error("Error while acquiring database connection", e);
-            shouldReconnect = true;
+            shouldReconnect.set(true);
+
+            return Optional.empty();
         }
     }
 }
