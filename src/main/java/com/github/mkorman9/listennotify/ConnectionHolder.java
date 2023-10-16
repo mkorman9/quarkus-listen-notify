@@ -9,7 +9,6 @@ import org.postgresql.jdbc.PgConnection;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -38,7 +37,7 @@ public class ConnectionHolder {
         }
 
         try {
-            getConnection().ifPresent(consumer);
+            consumer.accept(getConnection());
             resetExecutionErrorsCounter();
         } catch (Exception e) {
             reportExecutionError();
@@ -47,16 +46,33 @@ public class ConnectionHolder {
         }
     }
 
-    private Optional<PgConnection> getConnection() {
+    private PgConnection getConnection() {
         if (!connectionState.active()) {
-            if (!connectionState.shouldReconnect()) {
-                return Optional.empty();
-            }
-
-            connectionState = reconnect();
+            waitForConnection();
         }
 
-        return Optional.ofNullable(connectionState.active() ? connectionState.pgConnection() : null);
+        return connectionState.pgConnection();
+    }
+
+    private void waitForConnection() {
+        var i = 0;
+        while (true) {
+            connectionState = reconnect();
+            if (connectionState.active()) {
+                return;
+            }
+
+            var backoffTime = ((long) Math.min(Math.pow(2, i), 64));
+            log.error("Trying to acquire database connection (try #{}), waiting {}s", i, backoffTime);
+
+            try {
+                Thread.sleep(backoffTime * 1000);
+            } catch (InterruptedException e) {
+                // ignored
+            }
+
+            i++;
+        }
     }
 
     private void reportExecutionError() {
@@ -64,11 +80,6 @@ public class ConnectionHolder {
 
         if (executionErrorsCount > SQL_ERRORS_THRESHOLD) {
             var connection = connectionState.connection;
-            connectionState = ConnectionState.builder()
-                .active(false)
-                .shouldReconnect(false)
-                .build();
-
             if (connection != null) {
                 try {
                     connection.close();
@@ -77,8 +88,11 @@ public class ConnectionHolder {
                 }
             }
 
+            connectionState = ConnectionState.builder()
+                .active(false)
+                .build();
+
             resetExecutionErrorsCounter();
-            connectionState = reconnect();
         }
     }
 
@@ -99,7 +113,6 @@ public class ConnectionHolder {
 
             return ConnectionState.builder()
                 .active(true)
-                .shouldReconnect(false)
                 .connection(connection)
                 .pgConnection(connection.unwrap(PgConnection.class))
                 .build();
@@ -116,7 +129,6 @@ public class ConnectionHolder {
 
             return ConnectionState.builder()
                 .active(false)
-                .shouldReconnect(true)
                 .build();
         }
     }
@@ -124,7 +136,6 @@ public class ConnectionHolder {
     @Builder
     private record ConnectionState(
         boolean active,
-        boolean shouldReconnect,
         Connection connection,
         PgConnection pgConnection
     ) {
