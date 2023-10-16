@@ -26,6 +26,12 @@ public class ReceivingJob {
     private static final int RECEIVE_TIMEOUT_MS = 250;
     private static final int CONNECTION_ERRORS_THRESHOLD = 5;
 
+    private final AtomicBoolean isSubscribed = new AtomicBoolean(false);
+    private Connection connection;
+    private PgConnection pgConnection;
+    private int fetchErrorsCount;
+    private boolean shouldReconnect;
+
     @Inject
     DataSource dataSource;
 
@@ -35,23 +41,24 @@ public class ReceivingJob {
     @Inject
     ObjectMapper objectMapper;
 
-    private final AtomicBoolean connected = new AtomicBoolean(false);
-    private Connection connection;
-    private PgConnection pgConnection;
-    private int connectionErrors;
-
     public void onStart(@Observes StartupEvent startupEvent) {
         acquireConnection();
     }
 
     @Scheduled(every = "1s")
     public void onReceive() {
-        if (!connected.get()) {
-            return;
+        if (!isSubscribed.get()) {
+            if (shouldReconnect) {
+                acquireConnection();
+            } else {
+                return;
+            }
         }
 
         try {
             var notifications = pgConnection.getNotifications(RECEIVE_TIMEOUT_MS);
+            fetchErrorsCount = 0;
+
             if (notifications == null) {
                 return;
             }
@@ -71,15 +78,14 @@ public class ReceivingJob {
                 }
             }
         } catch (SQLException e) {
-            connectionErrors++;
+            fetchErrorsCount++;
 
             try {
-                if (connectionErrors > CONNECTION_ERRORS_THRESHOLD) {
-                    connected.set(false);
-                    connection.close();
-                    connectionErrors = 0;
+                if (fetchErrorsCount > CONNECTION_ERRORS_THRESHOLD) {
+                    isSubscribed.set(false);
+                    shouldReconnect = true;
 
-                    acquireConnection();  // reconnect
+                    connection.close();
                     return;
                 }
             } catch (SQLException ex) {
@@ -101,9 +107,15 @@ public class ReceivingJob {
             }
 
             pgConnection = connection.unwrap(PgConnection.class);
-            connected.set(true);
+
+            isSubscribed.set(true);
+            shouldReconnect = false;
+            fetchErrorsCount = 0;
         } catch (SQLException e) {
             log.error("Error while acquiring database connection", e);
+            shouldReconnect = true;
+
+            throw new RuntimeException(e);
         }
     }
 }
