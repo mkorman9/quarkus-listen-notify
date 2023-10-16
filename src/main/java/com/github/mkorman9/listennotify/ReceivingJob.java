@@ -31,7 +31,7 @@ public class ReceivingJob {
         connectionHolder.initialize();
     }
 
-    @Scheduled(every = "1s")
+    @Scheduled(every = "1s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     @RunOnVirtualThread
     public void onReceive() {
         connectionHolder.acquire(connection -> {
