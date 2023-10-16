@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.runtime.StartupEvent;
 import io.quarkus.scheduler.Scheduled;
+import io.smallrye.common.annotation.RunOnVirtualThread;
 import io.vertx.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -31,6 +32,7 @@ public class ReceivingJob {
     }
 
     @Scheduled(every = "1s")
+    @RunOnVirtualThread
     public void onReceive() {
         connectionHolder.acquire(connection -> {
             try {
