@@ -10,7 +10,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 @ApplicationScoped
@@ -18,62 +18,67 @@ import java.util.function.Consumer;
 public class ConnectionHolder {
     private static final int SQL_ERRORS_THRESHOLD = 5;
 
-    private final AtomicReference<ConnectionState> connectionState = new AtomicReference<>(
-        ConnectionState.builder()
-            .active(false)
-            .build()
-    );
+    private final AtomicBoolean acquired = new AtomicBoolean(true);
+    private ConnectionState connectionState = ConnectionState.builder()
+        .active(false)
+        .build();
     private int executionErrorsCount;
 
     @Inject
     DataSource dataSource;
 
     public void initialize() {
-        connectionState.set(reconnect());
+        connectionState = reconnect();
+        acquired.set(false);
     }
 
     public void acquire(Consumer<PgConnection> consumer) {
+        if (acquired.getAndSet(true)) {
+            return;
+        }
+
         try {
             getConnection().ifPresent(consumer);
             resetExecutionErrorsCounter();
         } catch (Exception e) {
             reportExecutionError();
+        } finally {
+            acquired.set(false);
         }
     }
 
     private Optional<PgConnection> getConnection() {
-        var cachedConnection = connectionState.get();
-        if (!cachedConnection.active()) {
-            if (!cachedConnection.shouldReconnect()) {
+        if (!connectionState.active()) {
+            if (!connectionState.shouldReconnect()) {
                 return Optional.empty();
             }
 
-            cachedConnection = reconnect();
-            connectionState.set(cachedConnection);
+            connectionState = reconnect();
         }
 
-        return Optional.ofNullable(cachedConnection.active() ? cachedConnection.pgConnection() : null);
+        return Optional.ofNullable(connectionState.active() ? connectionState.pgConnection() : null);
     }
 
     private void reportExecutionError() {
         executionErrorsCount++;
 
         if (executionErrorsCount > SQL_ERRORS_THRESHOLD) {
-            var cachedConnection = connectionState.getAndSet(ConnectionState.builder()
+            var connection = connectionState.connection;
+            connectionState = ConnectionState.builder()
                 .active(false)
                 .shouldReconnect(false)
-                .build()
-            );
-            if (cachedConnection.connection != null) {
+                .build();
+
+            if (connection != null) {
                 try {
-                    cachedConnection.connection.close();
+                    connection.close();
                 } catch (SQLException e) {
                     // ignore
                 }
             }
 
             resetExecutionErrorsCounter();
-            connectionState.set(reconnect());
+            connectionState = reconnect();
         }
     }
 
