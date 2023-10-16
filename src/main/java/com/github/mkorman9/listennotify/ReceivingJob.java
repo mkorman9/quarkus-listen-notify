@@ -9,13 +9,10 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
-import org.postgresql.jdbc.PgConnection;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @ApplicationScoped
 @Slf4j
@@ -24,13 +21,8 @@ public class ReceivingJob {
         "messages", Message.class
     );
     private static final int RECEIVE_TIMEOUT_MS = 250;
-    private static final int CONNECTION_ERRORS_THRESHOLD = 5;
 
-    private final AtomicBoolean isSubscribed = new AtomicBoolean(false);
-    private Connection connection;
-    private PgConnection pgConnection;
-    private int fetchErrorsCount;
-    private boolean shouldReconnect;
+    private ConnectionHolder connectionHolder;
 
     @Inject
     DataSource dataSource;
@@ -42,22 +34,22 @@ public class ReceivingJob {
     ObjectMapper objectMapper;
 
     public void onStart(@Observes StartupEvent startupEvent) {
-        acquireConnection();
+        connectionHolder = new ConnectionHolder(dataSource, CHANNELS);
+        connectionHolder.initialize();
     }
 
     @Scheduled(every = "1s")
     public void onReceive() {
-        if (!isSubscribed.get()) {
-            if (shouldReconnect) {
-                acquireConnection();
-            } else {
-                return;
-            }
+        var maybePgConnection = connectionHolder.getConnection();
+        if (maybePgConnection.isEmpty()) {
+            return;
         }
+
+        var pgConnection = maybePgConnection.get();
 
         try {
             var notifications = pgConnection.getNotifications(RECEIVE_TIMEOUT_MS);
-            fetchErrorsCount = 0;
+            connectionHolder.resetSqlErrors();
 
             if (notifications == null) {
                 return;
@@ -78,52 +70,8 @@ public class ReceivingJob {
                 }
             }
         } catch (SQLException e) {
-            fetchErrorsCount++;
-
-            try {
-                if (fetchErrorsCount > CONNECTION_ERRORS_THRESHOLD) {
-                    isSubscribed.set(false);
-                    shouldReconnect = true;
-
-                    connection.close();
-                    return;
-                }
-            } catch (SQLException ex) {
-                // ignore
-            }
-
             log.error("Error while fetching notifications from the database", e);
-        }
-    }
-
-    private void acquireConnection() {
-        try {
-            connection = dataSource.getConnection();
-
-            for (var channel : CHANNELS.keySet()) {
-                var statement = connection.createStatement();
-                statement.execute("LISTEN " + channel);
-                statement.close();
-            }
-
-            pgConnection = connection.unwrap(PgConnection.class);
-
-            fetchErrorsCount = 0;
-            isSubscribed.set(true);
-            shouldReconnect = false;
-        } catch (SQLException e) {
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (SQLException ex) {
-                    // ignore
-                }
-            }
-
-            log.error("Error while acquiring database connection", e);
-            shouldReconnect = true;
-
-            throw new RuntimeException(e);
+            connectionHolder.reportSqlError();
         }
     }
 }
