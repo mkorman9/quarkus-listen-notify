@@ -116,7 +116,7 @@ public class ConnectionHolder {
         }
     }
 
-    @Builder(toBuilder = true)
+    @Builder
     private record ConnectionState(
         boolean active,
         boolean shouldReconnect,
