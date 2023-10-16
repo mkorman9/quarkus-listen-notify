@@ -112,6 +112,14 @@ public class ReceivingJob {
             isSubscribed.set(true);
             shouldReconnect = false;
         } catch (SQLException e) {
+            if (connection != null) {
+                try {
+                    connection.close();
+                } catch (SQLException ex) {
+                    // ignore
+                }
+            }
+
             log.error("Error while acquiring database connection", e);
             shouldReconnect = true;
 
