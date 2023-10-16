@@ -10,7 +10,6 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 
-import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.util.Map;
 
@@ -22,10 +21,8 @@ public class ReceivingJob {
     );
     private static final int RECEIVE_TIMEOUT_MS = 250;
 
-    private ConnectionHolder connectionHolder;
-
     @Inject
-    DataSource dataSource;
+    ConnectionHolder connectionHolder;
 
     @Inject
     EventBus eventBus;
@@ -34,8 +31,7 @@ public class ReceivingJob {
     ObjectMapper objectMapper;
 
     public void onStart(@Observes StartupEvent startupEvent) {
-        connectionHolder = new ConnectionHolder(dataSource, CHANNELS);
-        connectionHolder.initialize();
+        connectionHolder.initialize(CHANNELS);
     }
 
     @Scheduled(every = "1s")

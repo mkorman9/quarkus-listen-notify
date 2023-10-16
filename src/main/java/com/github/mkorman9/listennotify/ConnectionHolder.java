@@ -1,5 +1,7 @@
 package com.github.mkorman9.listennotify;
 
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import org.postgresql.jdbc.PgConnection;
 
@@ -10,24 +12,23 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+@ApplicationScoped
 @Slf4j
 public class ConnectionHolder {
     private static final int SQL_ERRORS_THRESHOLD = 5;
 
-    private final DataSource dataSource;
-    private final Map<String, Class<?>> channelsMapping;
     private final AtomicBoolean isActive = new AtomicBoolean(false);
     private final AtomicBoolean shouldReconnect = new AtomicBoolean(false);
+    private Map<String, Class<?>> channelsMapping;
     private Connection connection;
     private PgConnection pgConnection;
     private int sqlErrorsCount;
 
-    public ConnectionHolder(DataSource dataSource, Map<String, Class<?>> channelsMapping) {
-        this.dataSource = dataSource;
-        this.channelsMapping = channelsMapping;
-    }
+    @Inject
+    DataSource dataSource;
 
-    public void initialize() {
+    public void initialize(Map<String, Class<?>> channelsMapping) {
+        this.channelsMapping = channelsMapping;
         reconnect();
     }
 
