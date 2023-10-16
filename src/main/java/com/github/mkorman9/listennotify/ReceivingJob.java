@@ -9,7 +9,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
-import org.postgresql.PGConnection;
+import org.postgresql.jdbc.PgConnection;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
@@ -33,29 +33,16 @@ public class ReceivingJob {
     @Inject
     ObjectMapper objectMapper;
 
-    private final AtomicBoolean started = new AtomicBoolean(false);
-    private PGConnection pgConnection;
+    private final AtomicBoolean connected = new AtomicBoolean(false);
+    private PgConnection pgConnection;
 
     public void onStart(@Observes StartupEvent startupEvent) {
-        try {
-            var connection = dataSource.getConnection();
-
-            for (var channel : CHANNELS.keySet()) {
-                var statement = connection.createStatement();
-                statement.execute("LISTEN " + channel);
-                statement.close();
-            }
-
-            pgConnection = connection.unwrap(PGConnection.class);
-            started.set(true);
-        } catch (SQLException e) {
-            log.error("SQL Error", e);
-        }
+        acquireConnection();
     }
 
     @Scheduled(every = "1s")
     public void onReceive() {
-        if (!started.get()) {
+        if (!connected.get()) {
             return;
         }
 
@@ -79,6 +66,33 @@ public class ReceivingJob {
                     log.error("Deserialization Error", e);
                 }
             }
+        } catch (SQLException e) {
+            try {
+                if (pgConnection.isClosed()) {
+                    connected.set(false);
+                    acquireConnection();  // reconnect
+                    return;
+                }
+            } catch (SQLException ex) {
+                // ignore
+            }
+
+            log.error("SQL Error", e);
+        }
+    }
+
+    private void acquireConnection() {
+        try {
+            var connection = dataSource.getConnection();
+
+            for (var channel : CHANNELS.keySet()) {
+                var statement = connection.createStatement();
+                statement.execute("LISTEN " + channel);
+                statement.close();
+            }
+
+            pgConnection = connection.unwrap(PgConnection.class);
+            connected.set(true);
         } catch (SQLException e) {
             log.error("SQL Error", e);
         }
