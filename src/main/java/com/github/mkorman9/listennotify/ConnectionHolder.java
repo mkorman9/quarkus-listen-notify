@@ -10,6 +10,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 @ApplicationScoped
 @Slf4j
@@ -20,7 +21,7 @@ public class ConnectionHolder {
     private final AtomicBoolean shouldReconnect = new AtomicBoolean(false);
     private Connection connection;
     private PgConnection pgConnection;
-    private int sqlErrorsCount;
+    private int executionErrorsCount;
 
     @Inject
     DataSource dataSource;
@@ -29,7 +30,16 @@ public class ConnectionHolder {
         reconnect();
     }
 
-    public Optional<PgConnection> getConnection() {
+    public void acquire(Consumer<PgConnection> consumer) {
+        try {
+            getConnection().ifPresent(consumer);
+            resetExecutionErrorsCounter();
+        } catch (Exception e) {
+            reportExecutionError();
+        }
+    }
+
+    private Optional<PgConnection> getConnection() {
         if (!isActive.get()) {
             if (shouldReconnect.get()) {
                 return reconnect();
@@ -41,13 +51,13 @@ public class ConnectionHolder {
         return Optional.of(pgConnection);
     }
 
-    public void reportSqlError() {
-        sqlErrorsCount++;
+    private void reportExecutionError() {
+        executionErrorsCount++;
 
-        if (sqlErrorsCount > SQL_ERRORS_THRESHOLD) {
+        if (executionErrorsCount > SQL_ERRORS_THRESHOLD) {
             try {
                 isActive.set(false);
-                sqlErrorsCount = 0;
+                resetExecutionErrorsCounter();
 
                 connection.close();
                 reconnect();
@@ -57,8 +67,8 @@ public class ConnectionHolder {
         }
     }
 
-    public void resetSqlErrors() {
-        sqlErrorsCount = 0;
+    private void resetExecutionErrorsCounter() {
+        executionErrorsCount = 0;
     }
 
     private Optional<PgConnection> reconnect() {

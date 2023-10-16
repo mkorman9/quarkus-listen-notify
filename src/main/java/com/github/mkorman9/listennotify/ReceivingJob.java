@@ -32,47 +32,40 @@ public class ReceivingJob {
 
     @Scheduled(every = "1s")
     public void onReceive() {
-        var maybePgConnection = connectionHolder.getConnection();
-        if (maybePgConnection.isEmpty()) {
-            return;
-        }
-
-        var pgConnection = maybePgConnection.get();
-
-        try {
-            var notifications = pgConnection.getNotifications(RECEIVE_TIMEOUT_MS);
-            connectionHolder.resetSqlErrors();
-
-            if (notifications == null) {
-                return;
-            }
-
-            for (var notification : notifications) {
-                var channel = Channel.fromChannelName(notification.getName());
-                if (channel == null) {
-                    log.error(
-                        "Received notification for unregistered channel: {}, ({})",
-                        notification.getName(),
-                        notification.getParameter()
-                    );
-                    continue;
+        connectionHolder.acquire(connection -> {
+            try {
+                var notifications = connection.getNotifications(RECEIVE_TIMEOUT_MS);
+                if (notifications == null) {
+                    return;
                 }
 
-                try {
-                    var message = objectMapper.readValue(notification.getParameter(), channel.getPayloadClass());
-                    eventBus.send(channel.getEventBusAddress(), message);
-                } catch (JsonProcessingException e) {
-                    log.error(
-                        "Notification deserialization error from channel {} ({})",
-                        notification.getName(),
-                        notification.getParameter(),
-                        e
-                    );
+                for (var notification : notifications) {
+                    var channel = Channel.fromChannelName(notification.getName());
+                    if (channel == null) {
+                        log.error(
+                            "Received notification for unregistered channel: {}, ({})",
+                            notification.getName(),
+                            notification.getParameter()
+                        );
+                        continue;
+                    }
+
+                    try {
+                        var message = objectMapper.readValue(notification.getParameter(), channel.getPayloadClass());
+                        eventBus.send(channel.getEventBusAddress(), message);
+                    } catch (JsonProcessingException e) {
+                        log.error(
+                            "Notification deserialization error from channel {} ({})",
+                            notification.getName(),
+                            notification.getParameter(),
+                            e
+                        );
+                    }
                 }
+            } catch (SQLException e) {
+                log.error("Error while fetching notifications from the database", e);
+                throw new RuntimeException(e);
             }
-        } catch (SQLException e) {
-            log.error("Error while fetching notifications from the database", e);
-            connectionHolder.reportSqlError();
-        }
+        });
     }
 }
