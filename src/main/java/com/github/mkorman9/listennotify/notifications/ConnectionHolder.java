@@ -48,12 +48,7 @@ class ConnectionHolder {
 
     private void waitForConnection() {
         var i = 0;
-        while (true) {
-            cachedConnection = reconnect();
-            if (cachedConnection != null) {
-                return;
-            }
-
+        while ((cachedConnection = reconnect()) == null) {
             var backoffTime = ((long)
                 Math.min(Math.pow(CONNECTION_ACQUIRE_BACKOFF_BASE, i), CONNECTION_ACQUIRE_MAX_TIME_SEC)
             );
