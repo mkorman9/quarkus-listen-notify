@@ -83,7 +83,7 @@ public class NotificationReceivingJob {
             eventBus.send(channel.getEventBusAddress(), message);
         } catch (JsonProcessingException e) {
             log.error(
-                "Notification deserialization error from channel {} ({})",
+                "Error while deserializing notification from channel {} ({})",
                 notification.getName(),
                 notification.getParameter(),
                 e

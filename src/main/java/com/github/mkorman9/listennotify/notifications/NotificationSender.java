@@ -19,7 +19,7 @@ public class NotificationSender {
     @Inject
     ObjectMapper objectMapper;
 
-    public void send(Channel channel, Object payload) {
+    public void send(Channel channel, Object payload) throws NotificationSendException {
         try (
             var connection = dataSource.getConnection();
             var statement = connection.createStatement()
@@ -34,11 +34,15 @@ public class NotificationSender {
                 )
             );
         } catch (SQLException e) {
-            log.error("Error while sending database notification to channel {}", channel.channelName(), e);
-            throw new RuntimeException(e);
+            throw new NotificationSendException(
+                "Error while sending database notification to channel " + channel.channelName(),
+                e
+            );
         } catch (JsonProcessingException e) {
-            log.error("Notification serialization error to channel {}", channel.channelName(), e);
-            throw new RuntimeException(e);
+            throw new NotificationSendException(
+                "Error while serializing notification for channel " + channel.channelName(),
+                e
+            );
         }
     }
 }
