@@ -10,6 +10,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import org.postgresql.PGNotification;
 
 import java.sql.SQLException;
 
@@ -52,22 +53,26 @@ public class ReceivingJob {
                         continue;
                     }
 
-                    try {
-                        var message = objectMapper.readValue(notification.getParameter(), channel.getPayloadClass());
-                        eventBus.send(channel.getEventBusAddress(), message);
-                    } catch (JsonProcessingException e) {
-                        log.error(
-                            "Notification deserialization error from channel {} ({})",
-                            notification.getName(),
-                            notification.getParameter(),
-                            e
-                        );
-                    }
+                    routeMessage(channel, notification);
                 }
             } catch (SQLException e) {
                 log.error("Error while fetching notifications from the database", e);
                 throw new RuntimeException(e);
             }
         });
+    }
+
+    private void routeMessage(Channel channel, PGNotification notification) {
+        try {
+            var message = objectMapper.readValue(notification.getParameter(), channel.getPayloadClass());
+            eventBus.send(channel.getEventBusAddress(), message);
+        } catch (JsonProcessingException e) {
+            log.error(
+                "Notification deserialization error from channel {} ({})",
+                notification.getName(),
+                notification.getParameter(),
+                e
+            );
+        }
     }
 }
