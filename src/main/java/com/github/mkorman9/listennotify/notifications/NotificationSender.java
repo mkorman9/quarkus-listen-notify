@@ -18,7 +18,7 @@ public class NotificationSender {
     @Inject
     ObjectMapper objectMapper;
 
-    public void send(Channel channel, Object message) {
+    public void send(Channel channel, Object payload) {
         try (
             var connection = dataSource.getConnection();
             var statement = connection.createStatement()
@@ -27,7 +27,7 @@ public class NotificationSender {
                 String.format(
                     "NOTIFY %s, '%s'",
                     channel.channelName(),
-                    objectMapper.writeValueAsString(message)
+                    objectMapper.writeValueAsString(payload)
                 )
             );
         } catch (SQLException e) {
