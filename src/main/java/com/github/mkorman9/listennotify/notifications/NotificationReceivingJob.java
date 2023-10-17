@@ -2,12 +2,10 @@ package com.github.mkorman9.listennotify.notifications;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.runtime.StartupEvent;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import io.vertx.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import org.postgresql.PGNotification;
@@ -31,13 +29,13 @@ public class NotificationReceivingJob {
     @Inject
     ObjectMapper objectMapper;
 
-    public void onStart(@Observes StartupEvent startupEvent) {
-        this.connectionHolder = new ConnectionHolder(dataSource);
-    }
-
     @Scheduled(every = "1s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     @RunOnVirtualThread
     public void onReceive() {
+        if (connectionHolder == null) {
+            connectionHolder = new ConnectionHolder(dataSource);
+        }
+
         connectionHolder.acquire(connection -> {
             try {
                 var notifications = connection.getNotifications(RECEIVE_TIMEOUT_MS);
