@@ -1,6 +1,5 @@
 package com.github.mkorman9.listennotify.notifications;
 
-import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.postgresql.jdbc.PgConnection;
 
@@ -19,14 +18,12 @@ class ConnectionHolder {
 
     private final Lock lock = new ReentrantLock();
     private DataSource dataSource;
-    private ConnectionState connectionState = ConnectionState.builder()
-        .active(false)
-        .build();
+    private CachedConnection cachedConnection;
     private int executionErrorsCount;
 
     public ConnectionHolder(DataSource dataSource) {
         this.dataSource = dataSource;
-        this.connectionState = reconnect();
+        this.cachedConnection = reconnect();
     }
 
     public void acquire(Consumer<PgConnection> consumer) {
@@ -42,18 +39,18 @@ class ConnectionHolder {
     }
 
     private PgConnection getConnection() {
-        if (!connectionState.active()) {
+        if (cachedConnection == null) {
             waitForConnection();
         }
 
-        return connectionState.pgConnection();
+        return cachedConnection.pgConnection();
     }
 
     private void waitForConnection() {
         var i = 0;
         while (true) {
-            connectionState = reconnect();
-            if (connectionState.active()) {
+            cachedConnection = reconnect();
+            if (cachedConnection != null) {
                 return;
             }
 
@@ -76,19 +73,15 @@ class ConnectionHolder {
         executionErrorsCount++;
 
         if (executionErrorsCount >= ERRORS_THRESHOLD_BEFORE_RECONNECT) {
-            var connection = connectionState.connection;
-            if (connection != null) {
+            if (cachedConnection != null) {
                 try {
-                    connection.close();
+                    cachedConnection.connection().close();
                 } catch (SQLException e) {
                     // ignore
                 }
             }
 
-            connectionState = ConnectionState.builder()
-                .active(false)
-                .build();
-
+            cachedConnection = null;
             resetExecutionErrorsCounter();
         }
     }
@@ -97,7 +90,7 @@ class ConnectionHolder {
         executionErrorsCount = 0;
     }
 
-    private ConnectionState reconnect() {
+    private CachedConnection reconnect() {
         Connection connection = null;
         try {
             connection = dataSource.getConnection();
@@ -108,11 +101,7 @@ class ConnectionHolder {
                 }
             }
 
-            return ConnectionState.builder()
-                .active(true)
-                .connection(connection)
-                .pgConnection(connection.unwrap(PgConnection.class))
-                .build();
+            return new CachedConnection(connection, connection.unwrap(PgConnection.class));
         } catch (SQLException e) {
             if (connection != null) {
                 try {
@@ -124,15 +113,11 @@ class ConnectionHolder {
 
             log.error("Error while acquiring database connection", e);
 
-            return ConnectionState.builder()
-                .active(false)
-                .build();
+            return null;
         }
     }
 
-    @Builder
-    private record ConnectionState(
-        boolean active,
+    private record CachedConnection(
         Connection connection,
         PgConnection pgConnection
     ) {
