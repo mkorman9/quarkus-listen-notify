@@ -9,7 +9,8 @@ import org.postgresql.jdbc.PgConnection;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 @ApplicationScoped
@@ -19,7 +20,7 @@ public class ConnectionHolder {
     private static final int CONNECTION_ACQUIRE_BACKOFF_BASE = 2;
     private static final int CONNECTION_ACQUIRE_MAX_TIME_SEC = 64;
 
-    private final AtomicBoolean acquired = new AtomicBoolean(true);
+    private final Lock lock = new ReentrantLock();
     private ConnectionState connectionState = ConnectionState.builder()
         .active(false)
         .build();
@@ -30,21 +31,17 @@ public class ConnectionHolder {
 
     public void initialize() {
         connectionState = reconnect();
-        acquired.set(false);
     }
 
     public void acquire(Consumer<PgConnection> consumer) {
-        if (acquired.getAndSet(true)) {
-            return;
-        }
-
         try {
+            lock.lock();
             consumer.accept(getConnection());
             resetExecutionErrorsCounter();
         } catch (Exception e) {
             reportExecutionError();
         } finally {
-            acquired.set(false);
+            lock.unlock();
         }
     }
 
