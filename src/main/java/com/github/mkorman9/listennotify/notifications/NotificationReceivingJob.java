@@ -68,7 +68,7 @@ public class NotificationReceivingJob {
                         continue;
                     }
 
-                    routeMessage(channel, notification);
+                    routeNotification(channel, notification);
                 }
             } catch (SQLException e) {
                 log.error("Error while fetching notifications from the database", e);
@@ -77,7 +77,7 @@ public class NotificationReceivingJob {
         });
     }
 
-    private void routeMessage(Channel channel, PGNotification notification) {
+    private void routeNotification(Channel channel, PGNotification notification) {
         try {
             var message = objectMapper.readValue(notification.getParameter(), channel.getPayloadClass());
             eventBus.send(channel.getEventBusAddress(), message);
