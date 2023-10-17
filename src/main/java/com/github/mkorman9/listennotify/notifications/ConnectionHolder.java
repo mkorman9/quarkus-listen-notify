@@ -90,8 +90,8 @@ class ConnectionHolder {
         try {
             connection = dataSource.getConnection();
 
-            for (var channel : Channel.values()) {
-                try (var statement = connection.createStatement()) {
+            try (var statement = connection.createStatement()) {
+                for (var channel : Channel.values()) {
                     statement.execute("LISTEN " + channel.channelName());
                 }
             }
