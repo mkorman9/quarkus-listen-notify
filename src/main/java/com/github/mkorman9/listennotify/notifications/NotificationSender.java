@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import org.postgresql.jdbc.PgConnection;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
@@ -23,11 +24,13 @@ public class NotificationSender {
             var connection = dataSource.getConnection();
             var statement = connection.createStatement()
         ) {
+            var pgConnection = connection.unwrap(PgConnection.class);
+
             statement.execute(
                 String.format(
                     "NOTIFY %s, '%s'",
                     channel.channelName(),
-                    objectMapper.writeValueAsString(payload)
+                    pgConnection.escapeString(objectMapper.writeValueAsString(payload))
                 )
             );
         } catch (SQLException e) {
