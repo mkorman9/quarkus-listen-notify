@@ -4,14 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import lombok.extern.slf4j.Slf4j;
 import org.postgresql.jdbc.PgConnection;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
 
 @ApplicationScoped
-@Slf4j
 public class NotificationSender {
     @Inject
     DataSource dataSource;
