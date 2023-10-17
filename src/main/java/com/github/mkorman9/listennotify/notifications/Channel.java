@@ -1,5 +1,6 @@
-package com.github.mkorman9.listennotify;
+package com.github.mkorman9.listennotify.notifications;
 
+import com.github.mkorman9.listennotify.Message;
 import lombok.Getter;
 
 @Getter

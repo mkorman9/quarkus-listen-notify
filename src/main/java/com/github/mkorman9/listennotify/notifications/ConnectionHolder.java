@@ -1,7 +1,5 @@
-package com.github.mkorman9.listennotify;
+package com.github.mkorman9.listennotify.notifications;
 
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.postgresql.jdbc.PgConnection;
@@ -13,24 +11,22 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
-@ApplicationScoped
 @Slf4j
-public class ConnectionHolder {
+class ConnectionHolder {
     private static final int ERRORS_THRESHOLD_BEFORE_RECONNECT = 5;
     private static final int CONNECTION_ACQUIRE_BACKOFF_BASE = 2;
     private static final int CONNECTION_ACQUIRE_MAX_TIME_SEC = 64;
 
     private final Lock lock = new ReentrantLock();
+    private DataSource dataSource;
     private ConnectionState connectionState = ConnectionState.builder()
         .active(false)
         .build();
     private int executionErrorsCount;
 
-    @Inject
-    DataSource dataSource;
-
-    public void initialize() {
-        connectionState = reconnect();
+    public ConnectionHolder(DataSource dataSource) {
+        this.dataSource = dataSource;
+        this.connectionState = reconnect();
     }
 
     public void acquire(Consumer<PgConnection> consumer) {

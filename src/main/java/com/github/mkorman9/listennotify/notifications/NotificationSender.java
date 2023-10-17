@@ -1,4 +1,4 @@
-package com.github.mkorman9.listennotify;
+package com.github.mkorman9.listennotify.notifications;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,7 +11,7 @@ import java.sql.SQLException;
 
 @ApplicationScoped
 @Slf4j
-public class Sender {
+public class NotificationSender {
     @Inject
     DataSource dataSource;
 
@@ -32,8 +32,10 @@ public class Sender {
             );
         } catch (SQLException e) {
             log.error("Error while sending database notification to channel {}", channel.channelName(), e);
+            throw new RuntimeException(e);
         } catch (JsonProcessingException e) {
             log.error("Notification serialization error to channel {}", channel.channelName(), e);
+            throw new RuntimeException(e);
         }
     }
 }

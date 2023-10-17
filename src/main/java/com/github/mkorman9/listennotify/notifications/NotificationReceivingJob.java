@@ -1,4 +1,4 @@
-package com.github.mkorman9.listennotify;
+package com.github.mkorman9.listennotify.notifications;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,15 +12,18 @@ import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import org.postgresql.PGNotification;
 
+import javax.sql.DataSource;
 import java.sql.SQLException;
 
 @ApplicationScoped
 @Slf4j
-public class ReceivingJob {
+public class NotificationReceivingJob {
     private static final int RECEIVE_TIMEOUT_MS = 250;
 
+    private ConnectionHolder connectionHolder;
+
     @Inject
-    ConnectionHolder connectionHolder;
+    DataSource dataSource;
 
     @Inject
     EventBus eventBus;
@@ -29,7 +32,7 @@ public class ReceivingJob {
     ObjectMapper objectMapper;
 
     public void onStart(@Observes StartupEvent startupEvent) {
-        connectionHolder.initialize();
+        this.connectionHolder = new ConnectionHolder(dataSource);
     }
 
     @Scheduled(every = "1s", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
